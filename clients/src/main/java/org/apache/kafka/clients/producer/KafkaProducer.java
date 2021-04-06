@@ -873,6 +873,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             // first make sure the metadata for the topic is available
             ClusterAndWaitTime clusterAndWaitTime;
             try {
+                // 1.确认数据要发送到的 topic 的 metadata 是可用的
                 clusterAndWaitTime = waitOnMetadata(record.topic(), record.partition(), maxBlockTimeMs);
             } catch (KafkaException e) {
                 if (metadata.isClosed())
@@ -897,6 +898,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                         " to class " + producerConfig.getClass(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG).getName() +
                         " specified in value.serializer", cce);
             }
+            // 3. 获取该 record 的 partition 的值（可以指定,也可以根据算法计算）
             int partition = partition(record, serializedKey, serializedValue, cluster);
             tp = new TopicPartition(record.topic(), partition);
 
@@ -913,9 +915,10 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 
             if (transactionManager != null && transactionManager.isTransactional())
                 transactionManager.maybeAddPartitionToTransaction(tp);
-
+            // 4. 向 accumulator 中追加数据
             RecordAccumulator.RecordAppendResult result = accumulator.append(tp, timestamp, serializedKey,
                     serializedValue, headers, interceptCallback, remainingWaitMs);
+            // 5. 如果 batch 已经满了,唤醒 sender 线程发送数据
             if (result.batchIsFull || result.newBatchCreated) {
                 log.trace("Waking up the sender since topic {} partition {} is either full or getting a new batch", record.topic(), partition);
                 this.sender.wakeup();

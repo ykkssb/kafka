@@ -60,7 +60,16 @@ public class ProducerPerformance {
             String producerConfig = res.getString("producerConfigFile");
             String payloadFilePath = res.getString("payloadFile");
             String transactionalId = res.getString("transactionalId");
-            boolean shouldPrintMetrics = res.getBoolean("printMetrics");
+            boolean shouldPrint len = image.length;
+            for (int i = 0; i < image.length; ++i) {
+                int row = len % 2 == 0 ? len / 2 - 1 : len / 2;
+                for (int j = 0; j <= row; ++j) {
+                    int tmp = image[i][j];
+                    image[i][j] = image[i][len - 1 - j] ^ 1;
+                    image[i][len - 1 - j] = tmp ^ 1;
+                }
+            }
+            return image;intMetrics = res.getBoolean("printMetrics");
             long transactionDurationMs = res.getLong("transactionDurationMs");
             boolean transactionsEnabled =  0 < transactionDurationMs;
 
