@@ -194,19 +194,24 @@ public final class RecordAccumulator {
         if (headers == null) headers = Record.EMPTY_HEADERS;
         try {
             // check if we have an in-progress batch
+            // 每个 topicPartition 对应一个 queue
             Deque<ProducerBatch> dq = getOrCreateDeque(tp);
+            // 在对一个 queue 进行操作时,会保证线程安全
             synchronized (dq) {
                 if (closed)
                     throw new KafkaException("Producer closed while send in progress");
                 RecordAppendResult appendResult = tryAppend(timestamp, key, value, headers, callback, dq);
+                // 这个 topic-partition 已经有记录了
                 if (appendResult != null)
                     return appendResult;
             }
 
             // we don't have an in-progress record batch try to allocate a new batch
             byte maxUsableMagic = apiVersions.maxUsableProduceMagic();
+            // 为 topic-partition 创建一个新的 RecordBatch, 需要初始化相应的 RecordBatch，要为其分配的大小是: max（batch.size, 加上头文件的本条消息的大小）
             int size = Math.max(this.batchSize, AbstractRecords.estimateSizeInBytesUpperBound(maxUsableMagic, compression, key, value, headers));
             log.trace("Allocating a new {} byte message buffer for topic {} partition {}", size, tp.topic(), tp.partition());
+            // 给这个 RecordBatch 初始化一个 buffer
             buffer = free.allocate(size, maxTimeToBlock);
             synchronized (dq) {
                 // Need to check if producer is closed again after grabbing the dequeue lock.
@@ -219,15 +224,20 @@ public final class RecordAccumulator {
                     return appendResult;
                 }
 
+                // 给 topic-partition 创建一个 RecordBatch
                 MemoryRecordsBuilder recordsBuilder = recordsBuilder(buffer, maxUsableMagic);
                 ProducerBatch batch = new ProducerBatch(tp, recordsBuilder, time.milliseconds());
+                // 向新的 RecordBatch 中追加数据
                 FutureRecordMetadata future = Utils.notNull(batch.tryAppend(timestamp, key, value, headers, callback, time.milliseconds()));
 
+                // 将 RecordBatch 添加到对应的 queue 中
                 dq.addLast(batch);
+                // 向未 ack 的 batch 集合添加这个 batch
                 incomplete.add(batch);
 
                 // Don't deallocate this buffer in the finally block as it's being used in the record batch
                 buffer = null;
+                // 如果 dp.size()>1 就证明这个 queue 有一个 batch 是可以发送了
                 return new RecordAppendResult(future, dq.size() > 1 || batch.isFull(), true);
             }
         } finally {
